@@ -47,7 +47,7 @@ options:
     reserved:
         description:
             - <code>true</code> if reserved; otherwise, <code>false</code>.
-    
+
     scm_site_also_stopped:
         description:
             - <code>true</code> to stop SCM (KUDU) site when the app is stopped; otherwise, <code>false</code>. The default is <code>false</code>.
@@ -66,20 +66,20 @@ options:
         description:
             - "<code>true</code> to enable client certificate authentication (TLS mutual authentication); otherwise, <code>false</code>. Default is
                <code>false</code>."
-    
+
     host_names_disabled:
         description:
             - <code>true</code> to disable the public hostnames of the app; otherwise, <code>false</code>.
             -  If <code>true</code>, the app is only accessible via API management process.
-    
+
     container_size:
         description:
             - Size of the function container.
-    
+
     daily_memory_time_quota:
         description:
             - Maximum allowed daily memory-time quota (applicable on dynamic apps only).
-    
+
     https_only:
         description:
             - "HttpsOnly: configures a web site to accept only https requests. Issues redirect for"
@@ -103,6 +103,32 @@ options:
     ttl_in_seconds:
         description:
             - "Time to live in seconds for web app's default domain name."
+    site_config:
+        description:
+            - Site Configuration.
+        suboptions:
+            app_settings:
+                description: List of application settings.
+                key:
+                    description: Key of application setting.
+                value:
+                    description: Value of application setting.
+            java_container:
+                description: Java container.
+                default: ""
+            java_version:
+                description: Java version.
+            linux_fx_version:
+                description: Linux App Framework and version
+            always_on:
+                description: True if Always On is enabled; Otherwise, False.
+                default: True
+            number_of_works:
+                description: Number of workers.
+                default: 1
+
+
+
     state:
       description:
         - Assert the state of the Web App.
@@ -154,9 +180,17 @@ try:
     from msrestazure.azure_exceptions import CloudError
     from msrestazure.azure_operation import AzureOperationPoller
     from msrest.serialization import Model
+    from azure.mgmt.web.models import (
+        site_config, app_service_plan, hosting_environment_profile
+    )
 except ImportError:
     # This is handled in azure_rm_common
     pass
+
+
+site_config_spec = dict(
+    app_settings=dict(type='list')
+)
 
 
 def create_app_service_plan():
@@ -236,6 +270,11 @@ class AzureRMWebApps(AzureRMModuleBase):
             force_dns_registration=dict(
                 type='str'
             ),
+            site_config=dict(
+                type='dict',
+                elements='dict',
+                options=site_config_spec
+            )
             ttl_in_seconds=dict(
                 type='str'
             ),
@@ -253,6 +292,8 @@ class AzureRMWebApps(AzureRMModuleBase):
         self.skip_custom_domain_verification = None
         self.force_dns_registration = None
         self.ttl_in_seconds = None
+
+        self.site_config = None
 
         self.results = dict(changed=False)
         self.state = None
@@ -298,13 +339,16 @@ class AzureRMWebApps(AzureRMModuleBase):
                     self.site_envelope["https_only"] = kwargs[key]
                 elif key == "identity":
                     self.site_envelope["identity"] = kwargs[key]
+                elif key == "site_config":
+                    self.site_envelope["site_config"] = kwargs[key]
 
         old_response = None
         response = None
+        to_be_updated = False
 
         resource_group = self.get_resource_group(self.resource_group)
-        if not self.location:
-            self.location = resource_group.location
+        if "location" not in self.site_envelope:
+            self.site_envelope["location"] = resource_group.location
 
         old_response = self.get_webapp()
 
@@ -360,6 +404,44 @@ class AzureRMWebApps(AzureRMModuleBase):
 
         return self.results
 
+    # compare existing web app with input, determine weather it's update operation
+    def is_property_update(self, existing_webapp):
+        # enabled
+        if is_property_changed(self, 'enabled', existing_webapp('enabled'):
+            return True
+        if is_property_changed(self, 'server_farm_id', existing_webapp('server_farm_id'):
+            return True
+        if is_property_changed(self, 'reserved', existing_webapp('reserved'):
+            return True
+        if is_property_changed(self, 'scm_site_also_stopped', existing_webapp('scm_site_also_stopped'):
+            return True
+        if is_property_changed(self, 'client_affinity_enabled', existing_webapp('client_affinity_enabled'):
+            return True
+        if is_property_changed(self, 'client_cert_enabled', existing_webapp('client_cert_enabled'):
+            return True
+        if is_property_changed(self, 'host_names_disabled', existing_webapp('host_names_disabled'):
+            return True
+        if is_property_changed(self, 'https_only', existing_webapp('https_only'):
+            return True
+        if is_property_changed(self, 'container_size', existing_webapp('container_size'):
+            return True
+        if is_property_changed(self, 'dailyMemoryTimeQuota', existing_webapp('dailyMemoryTimeQuota'):
+            return True
+        return False
+
+    # compare existing web app site_config with input, determine weather it's update operation
+    def is_site_config_update(self, existing_webapp):
+        if len(self.site_config.app_settings) != len(existing_webapp['site_config']['application_setting']):
+            return True
+        return False
+
+    # return weather property in input exists and changed comparing to specific value
+    def is_property_changed(self, property_name, property_value):
+        if self.site_envelope[property_name] and self.site_envelope[property_name] != property_value:
+            return True
+        return False
+
+
     def create_update_webapp(self):
         '''
         Creates or updates Web App with the specified configuration.
@@ -370,11 +452,11 @@ class AzureRMWebApps(AzureRMModuleBase):
             "Creating / Updating the Web App instance {0}".format(self.name))
 
         try:
-            response = self.web_client.web_apps.create_or_update(resource_group_name=self.resource_group,
+            response=self.web_client.web_apps.create_or_update(resource_group_name=self.resource_group,
                                                                  name=self.name,
                                                                  site_envelope=self.site_envelope)
             if isinstance(response, AzureOperationPoller):
-                response = self.get_poller_result(response)
+                response=self.get_poller_result(response)
 
         except CloudError as exc:
             self.log('Error attempting to create the Web App instance.')
@@ -390,7 +472,7 @@ class AzureRMWebApps(AzureRMModuleBase):
         '''
         self.log("Deleting the Web App instance {0}".format(self.name))
         try:
-            response = self.web_client.web_apps.delete(resource_group_name=self.resource_group,
+            response=self.web_client.web_apps.delete(resource_group_name=self.resource_group,
                                                        name=self.name)
         except CloudError as e:
             self.log('Error attempting to delete the Web App instance.')
@@ -409,7 +491,7 @@ class AzureRMWebApps(AzureRMModuleBase):
             "Checking if the Web App instance {0} is present".format(self.name))
 
         try:
-            response = self.web_client.web_apps.get(resource_group_name=self.resource_group,
+            response=self.web_client.web_apps.get(resource_group_name=self.resource_group,
                                                     name=self.name)
 
             self.log("Response : {0}".format(response))
@@ -417,8 +499,8 @@ class AzureRMWebApps(AzureRMModuleBase):
             return response.as_dict()
 
         except CloudError as ex:
-            self.fail(
-                "Error getting web app {0} - {1}".format(self.name, str(ex)))
+            self.log("Didn't find web app {0} in resource group {1}".format(
+                self.name, self.resource_group))
 
         return False
 
