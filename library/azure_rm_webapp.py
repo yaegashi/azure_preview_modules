@@ -292,7 +292,7 @@ class AzureRMWebApps(AzureRMModuleBase):
         self.skip_custom_domain_verification = None
         self.force_dns_registration = None
         self.ttl_in_seconds = None
-
+        self.tags = None
         self.site_config = None
 
         self.results = dict(changed=False)
@@ -301,12 +301,12 @@ class AzureRMWebApps(AzureRMModuleBase):
 
         super(AzureRMWebApps, self).__init__(derived_arg_spec=self.module_arg_spec,
                                              supports_check_mode=True,
-                                             supports_tags=False)
+                                             supports_tags=True)
 
     def exec_module(self, **kwargs):
         """Main module execution method"""
 
-        for key in list(self.module_arg_spec.keys()):
+        for key in list(self.module_arg_spec.keys()) + ['tags']:
             if hasattr(self, key):
                 setattr(self, key, kwargs[key])
             elif kwargs[key] is not None:
@@ -340,11 +340,11 @@ class AzureRMWebApps(AzureRMModuleBase):
                 elif key == "identity":
                     self.site_envelope["identity"] = kwargs[key]
                 elif key == "site_config":
-                    self.site_envelope["site_config"] = kwargs[key]
+                    self.site_envelope["site_config"] = kwargs[key]                
 
         old_response = None
         response = None
-        to_be_updated = False
+        to_be_updated = False        
 
         resource_group = self.get_resource_group(self.resource_group)
         if "location" not in self.site_envelope:
@@ -352,22 +352,34 @@ class AzureRMWebApps(AzureRMModuleBase):
 
         old_response = self.get_webapp()
 
+        # check if the web app already present in the resource group
         if not old_response:
-            self.log("Web App instance doesn't exist")
+            self.log("Web App instance doesn't exist")            
+
             if self.state == 'absent':
                 self.log("Old instance didn't exist")
             else:
                 self.to_do = Actions.Create
+                to_be_updated = True
+
         else:
             self.log("Web App instance already exists")
             if self.state == 'absent':
                 self.to_do = Actions.Delete
+
             elif self.state == 'present':
                 self.log(
                     "Need to check if Web App instance has to be deleted or may be updated")
                 self.to_do = Actions.Update
 
-        if (self.to_do == Actions.Create) or (self.to_do == Actions.Update):
+                update_tags, old_response['tags'] = self.update_tags(response['tags'])
+
+                if response['state'] == "Running":
+                    if is_property_update(self, old_response):
+                        to_be_updated = True
+
+
+        if to_be_updated:
             self.log("Need to Create / Update the Web App instance")
 
             if self.check_mode:
@@ -381,6 +393,7 @@ class AzureRMWebApps(AzureRMModuleBase):
             else:
                 self.results['changed'] = old_response.__ne__(response)
             self.log("Creation / Update done")
+
         elif self.to_do == Actions.Delete:
             self.log("Web App instance deleted")
             self.results['changed'] = True
@@ -393,6 +406,7 @@ class AzureRMWebApps(AzureRMModuleBase):
             # for some time after deletion -- this should be really fixed in Azure
             while self.get_webapp():
                 time.sleep(20)
+
         else:
             self.log("Web App instance unchanged")
             self.results['changed'] = False
