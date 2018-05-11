@@ -181,8 +181,8 @@ try:
     from msrestazure.azure_operation import AzureOperationPoller
     from msrest.serialization import Model
     from azure.mgmt.web.models import (
-        site_config, app_service_plan, hosting_environment_profile, Site,
-        AppServicePlan, SkuDescription
+        site_config, app_service_plan, Site,
+        AppServicePlan, SkuDescription, NameValuePair
 
     )
 except ImportError:
@@ -191,32 +191,35 @@ except ImportError:
 
 
 app_service_plan_spec = dict(
-    resource_group=dict(type='str')
-    name=dict(type='str', required=True)
-    is_linux=dict(type='bool')
-    number_of_workers=dict(type='Integer')
+    resource_group=dict(type='str'),
+    name=dict(type='str', required=True),
+    is_linux=dict(type='bool'),
+    number_of_workers=dict(type='int'),
     sku=dict(type='str')
 )
 
 container_settings_spec = dict(
-    name=dict(type='str', required=True)
-    registry_server_url=dict(type='str')
-    registry_server_user=dict(type='str')
+    name=dict(type='str', required=True),
+    registry_server_url=dict(type='str'),
+    registry_server_user=dict(type='str'),
     registry_server_password=dict(type='str')
 )
 
 java_container_settings_spec = dict(
-    name=dict(type='str')
-    version=dict(type='str')
+    name=dict(type='str', required=True),
+    version=dict(type='str', required=True)
 )
 
 deployment_source_spec = dict(
-    url=dict(type='str')
+    url=dict(type='str'),
     branch=dict(type='str')
 )
 
 
 def _normalize_sku(sku):
+    if sku is None:
+        return sku
+
     sku = sku.upper()
     if sku == 'FREE':
         return 'F1'
@@ -242,14 +245,6 @@ def get_sku_name(tier):
     else:
         raise CLIError(
             "Invalid sku(pricing tier), please refer to command help for valid values")
-
-
-def create_app_service_plan():
-    return True
-
-
-def create_site_config():
-    return True
 
 
 class Actions:
@@ -301,14 +296,14 @@ class AzureRMWebApps(AzureRMModuleBase):
             ),
             scm_type=dict(
                 type='dict',
-            )
+            ),
             deployment_source=dict(
                 type='dict',
                 options=deployment_source_spec
             ),
             git_token=dict(
                 type='str'
-            )
+            ),
             startup_file=dict(
                 type='str'
             ),
@@ -316,7 +311,8 @@ class AzureRMWebApps(AzureRMModuleBase):
                 type='str'
             ),
             client_affinity_enabled=dict(
-                type='bool'
+                type='bool',
+                default=True
             ),
             force_dns_registration=dict(
                 type='bool'
@@ -331,11 +327,11 @@ class AzureRMWebApps(AzureRMModuleBase):
                 type='bool'
             ),
             ttl_in_seconds=dict(
-                type='Integer'
+                type='int'
             ),
             app_settings=dict(
-                type='list'
-            )
+                type='dict'
+            ),
             state=dict(
                 type='str',
                 default='present',
@@ -345,28 +341,33 @@ class AzureRMWebApps(AzureRMModuleBase):
 
         self.resource_group = None
         self.name = None
+        self.location = None
 
         # update in create_or_update as parameters
+        self.client_affinity_enabled = True
         self.force_dns_registration = None
         self.skip_dns_registration = None
         self.skip_custom_domain_verification = None
         self.ttl_in_seconds = None
+        self.https_only = None
 
         self.tags = None
 
-        # for site config, e.g app settings, ssl
+        # site config, e.g app settings, ssl
         self.site_config = dict()
-        self.app_settings = []
+        self.app_settings = dict()
+        self.app_settings_strDic = None
 
         # app service plan
         self.plan = None
-        self.plan_id = None
-
         # siteSourceControl
-        self.site_source_control = dict()
+        self.deployment_source = dict()
 
-        # for site level creation, or update. e.g windows/linux, client_affinity etc first level args
+        # site, used at level creation, or update. e.g windows/linux, client_affinity etc first level args
         self.site = None
+
+        # property for internal usage, not used for sdk
+        self.container_settings = None
 
         self.results = dict(changed=False)
         self.state = None
@@ -387,7 +388,16 @@ class AzureRMWebApps(AzureRMModuleBase):
         site_config_properties = ["net_framework_version",
                                   "java_version",
                                   "php_version",
-                                  "python_version"]
+                                  "python_version",
+                                  "linux_fx_version"]
+
+        # updatable_properties
+        updatable_properties = ["client_affinity_enabled",
+                                "force_dns_registration",
+                                "https_only",
+                                "skip_custom_domain_verification",
+                                "skip_dns_registration",
+                                "ttl_in_seconds"]
 
         for key in list(self.module_arg_spec.keys()):
             if hasattr(self, key):
@@ -397,34 +407,50 @@ class AzureRMWebApps(AzureRMModuleBase):
 
                     self.site_config[key] = kwargs[key]
                 if key == "java_container_settings":
-                    self.site_config['java_container'] = kwargs['java_container_settings']['name']
-                    self.site_config['java_container_version'] = kwargs['java_container_settings']['version']
+                    if 'name' in kwargs['java_container_settings']:
+                        self.site_config['java_container'] = kwargs['java_container_settings']['name']
+                    if 'version' in kwargs['java_container_settings']:
+                        self.site_config['java_container_version'] = kwargs['java_container_settings']['version']
 
-                if key == "container_settings":
-                    # set linux_fx_version
-                    self.linux_fx_version = 'DOCKER|' + \
-                        kwargs['container_settings']['registry_server_url'] + \
-                        '/' + kwargs['container_settings']['name']
-                    self.site_config['app_settings'].append('DOCKER_REGISTRY_SERVER_URL') = 'https://' = kwargs['container_settings']['registry_server_url']
-
-                    if kwargs['container_settings']['registry_server_user'] is not None and \
-                            kwargs['container_settings']['registry_server_password'] is not None:
-                        self.site_config['app_settings'].append('DOCKER_REGISTRY_SERVER_USERNAME') = kwargs['container_settings']['registry_server_user']
-                        self.site_config['app_settings'].append('DOCKER_REGISTRY_SERVER_PASSWORD') = kwargs['container_settings']['registry_server_password']
-
-                if key == "deployment_source":
-                    self.site_source_control['repo_url'] = kwargs['deployment_source']['url']
-                    self.site_source_control['branch'] = kwargs['deployment_source']['branch']
+                # if key == "deployment_source":
+                #     self.site_source_control['repo_url'] = kwargs['deployment_source']['url']
+                #     self.site_source_control['branch'] = kwargs['deployment_source']['branch']
 
         # start main flow
         old_response = None
         response = None
         to_be_updated = False
 
+        if self.container_settings is not None:
+
+            if hasattr(self.site_config, 'linux_fx_version'):
+                self.fail(
+                    "Cannot set linux_fx_version with container_settings at same time.")
+
+            linux_fx_version = 'DOCKER|'
+
+            if self.container_settings.get('registry_server_url', None) is not None:
+                self.app_settings['DOCKER_REGISTRY_SERVER_URL'] = 'https://' + \
+                    self.container_settings['registry_server_url']
+
+                linux_fx_version += self.container_settings['registry_server_url']
+
+            linux_fx_version += self.container_settings['name']
+
+            self.site_config['linux_fx_version'] = linux_fx_version
+
+            if self.container_settings.get('registry_server_user', None) is not None:
+                self.app_settings['DOCKER_REGISTRY_SERVER_USERNAME'] = self.container_settings['registry_server_user']
+
+            if self.container_settings.get('registry_server_password', None) is not None:
+                self.app_settings['DOCKER_REGISTRY_SERVER_PASSWORD'] = self.container_settings['registry_server_password']
+
+        # set location
         resource_group = self.get_resource_group(self.resource_group)
         if not self.location:
             self.location = resource_group.location
 
+        # get existing web app
         old_response = self.get_webapp()
 
         # check if the web app already present in the resource group
@@ -446,41 +472,53 @@ class AzureRMWebApps(AzureRMModuleBase):
                 if "resource_group" not in self.plan:
                     self.plan['resource_group'] = self.resource_group
 
-                # try to get app service plan
+                # get app service plan
                 old_plan = self.get_app_service_plan()
 
                 if not old_plan:
                     # no existing service plan, create one
                     if ('name' not in self.plan or
                         'is_linux' not in self.plan or
-                        'sku' not in self.plan)
+                            'sku' not in self.plan):
                         self.fail(
                             'Please specify name, is_linux, sku in plan')
+
+                    if 'location' not in self.plan:
+                        plan_resource_group = self.get_resource_group(
+                            self.plan['resource_group'])
+                        self.plan['location'] = plan_resource_group.location
+
                     old_plan = self.create_app_service_plan()
-                self.plan_id = old_plan['id']
+
+                plan_id = old_plan['id']
+
+                if hasattr(old_plan, "is_linux"):
+                    old_plan['reserved'] = old_plan['is_linux']
 
                 # prepare to create web app
-
-                # 1. setup app settings in site_config
 
                 # if linux, setup linux_fx_version
                 # linux_fx_version is mapping to sdk linux_fx_version, which is only for linux web app
                 # linux_fx_version for docker web app is like DOCKER|imagename:tag
                 # xxx_version is mapping to sdk xxx_version, which is only for windows web app
                 if old_plan['reserved']:
-                    # run time is o
-                    if not self.validate_linux_create_options(self.linux_fx_version, self.container_settings):
-                        self.fail(
-                            'Cannot specify linux_fx_version and container_settings at same time')
-                    if self.startup_file:
+                    if hasattr(self, 'startup_file'):
                         self.site_config['app_command_line'] = self.startup_file
 
-                # for linux, check configuration run time and docker cannot co-exists
-                self.site = Site(server_farm_id=self.plan_id,
+                self.site = Site(server_farm_id=plan_id,
                                  location=self.location, site_config=self.site_config)
 
-                if self.client_affinity_enabled is not None:
+                if hasattr(self, "client_affinity_enabled"):
                     self.site.client_affinity_enabled = self.client_affinity_enabled
+
+                # set app setting
+                if self.app_settings is not None:
+                    app_settings = []
+                    for key in self.app_settings.keys():
+                        app_settings.append(NameValuePair(
+                            key, self.app_settings[key]))
+
+                    self.site_config['app_settings'] = app_settings
 
                 # create web app
                 response = self.create_update_webapp()
@@ -499,29 +537,38 @@ class AzureRMWebApps(AzureRMModuleBase):
                 self.log('Result: {0}'.format(old_response))
 
                 update_tags, old_response['tags'] = self.update_tags(
-                    old_response['tags'])
+                    old_response.get('tags', dict()))
 
                 if old_response['state'] == "Running":
                     if update_tags:
                         to_be_updated = True
 
+                    self.site = Site(location=self.location,
+                                     site_config=self.site_config)
+
                     # if root level property changed, call create_or_update
-                    if self.is_updatable_property_changed(old_response):
+                    if self.is_updatable_property_changed(old_response) or is_site_config_fx_version_changed(old_response):
 
                         to_be_updated = True
                         response = self.create_update_webapp()
 
-                    # if app_settings changed, call create_or_update_appsetting
-                    if self.is_app_settings_changed(old_response):
+                    # get existing app_settings
+                    self.app_settings_strDic = self.list_app_settings()
+
+                    if self.is_app_settings_changed():
+                        # if app_settings changed, call create_or_update_appsetting
+                        self.app_settings_strDic.properties = dict()
+                        for key in self.app_settings.keys():
+                            self.app_settings_strDic.properties[key] = self.app_settings[key]
 
                         to_be_updated = True
-                        response = self.update_app_settings()
+                        update_as_response = self.update_app_settings()
 
                     # if deployment_source changed, call create_or_update_source_control
-                    if self.is_app_settings_changed(old_response):
+                    if self.is_deployment_source_changed(old_response):
 
                         to_be_updated = True
-                        response = self.create_or_update_source_control()
+                        update_sc_response = self.create_or_update_source_control()
 
         if to_be_updated:
             self.log('Need to Create/Update web app')
@@ -549,63 +596,44 @@ class AzureRMWebApps(AzureRMModuleBase):
 
     # compare existing web app with input, determine weather it's update operation
     def is_updatable_property_changed(self, existing_webapp):
-        if self.is_property_changed('client_affinity_enabled', existing_webapp.get('client_affinity_enabled')):
-            return True
-        if self.is_property_changed('force_dns_registration', existing_webapp.get('force_dns_registration')):
-            return True
-        if self.is_property_changed('https_only', existing_webapp.get('https_only')):
-            return True
-        if self.is_property_changed('skip_custom_domain_verification', existing_webapp.get('skip_custom_domain_verification')):
-            return True
-        if self.is_property_changed('skip_dns_registration', existing_webapp.get('skip_dns_registration')):
-            return True
-        if self.is_property_changed('ttl_in_seconds', existing_webapp.get('ttl_in_seconds')):
-            return True
+        for property in updatable_properties:
+            if hasattr(self, property_name) and getattr(self, property_name) != property_value:
+                return True
+
         return False
 
-    # compare existing web app site_config with input, determine weather it's update operation
-    def is_site_config_update(self, existing_webapp):
-        if len(self.site_config.app_settings) != len(existing_webapp['site_config']['application_setting']):
-            return True
+    # compare xxx_version
+    def is_site_config_fx_version_changed(self, existing_webapp):
+        for fx_version in site_config_properties:
+            if self.site_config.get(fx_version, None) != existing_webapp.get(fx_version, None):
+                return True
+
         return False
 
     # comparing existing app setting with input, determine whether it's changed
-    def is_app_settings_changed(self, existing_webapp):
-        if self.app_settings is None:
-            return True
+    def is_app_settings_changed(self):
+        if self.app_settings is not None:
+            if len(self.app_settings_strDic.properties) != len(self.app_settings):
+                return True
 
-        if len(self.app_settings) != len(existing_webapp.get('app_settings'))
-            return True
-
-        elif len(self.app_settings) > 0:
-            return True
-
-        else:
-            for index in range(len(self.app_settings)):
-                for key in self.app_settings[i]:
-                    if existing_webapp.get('app_settings')[key] is None \
-                            or existing_webapp.get('app_settings')[key] != self.app_settings[i][key]:
+            elif self.app_settings_strDic.properties is not None and len(self.app_settings_strDic.properties) > 0:
+                for key in self.app_settings.keys():
+                    if self.app_settings_strDic.properties[key] is None \
+                            or self.app_settings[key] != self.app_settings_strDic.properties[key]:
                         return True
         return False
 
     # comparing deployment source with input, determine wheather it's changed
     def is_deployment_source_changed(self, existing_webapp):
-        if self.site_source_control is not None:
-            if self.site_source_control.url is not None \
-                    and self.site_source_control.url != existing_webapp.get('site_source_control')['url']:
+        if self.deployment_source is not None:
+            if self.deployment_source.get('url', None) is not None \
+                    and self.deployment_source['url'] != existing_webapp.get('site_source_control')['url']:
                 return True
 
-            if self.site_source_control.branch is not None \
-                    and self.site_source_control.branch != existing_webapp.get('site_source_control')['branch']:
+            if self.deployment_source.get('branch', None) is not None \
+                    and self.deployment_source['branch'] != existing_webapp.get('site_source_control')['branch']:
                 return True
 
-        return False
-
-    # return weather property in input exists and changed comparing to specific value
-    def is_property_changed(self, property_name, property_value):
-        if self.get(property_name) not None \
-                and self.get(property_name) != property_value:
-            return True
         return False
 
     def create_update_webapp(self):
@@ -621,10 +649,10 @@ class AzureRMWebApps(AzureRMModuleBase):
             response = self.web_client.web_apps.create_or_update(resource_group_name=self.resource_group,
                                                                  name=self.name,
                                                                  site_envelope=self.site,
-                                                                 self.skip_dns_registration,
-                                                                 self.skip_custom_domain_verification,
-                                                                 self.force_dns_registration,
-                                                                 self.ttl_in_seconds)
+                                                                 skip_dns_registration=self.skip_dns_registration,
+                                                                 skip_custom_domain_verification=self.skip_custom_domain_verification,
+                                                                 force_dns_registration=self.force_dns_registration,
+                                                                 ttl_in_seconds=self.ttl_in_seconds)
             if isinstance(response, AzureOperationPoller):
                 response = self.get_poller_result(response)
 
@@ -660,6 +688,8 @@ class AzureRMWebApps(AzureRMModuleBase):
         self.log(
             "Checking if the Web App instance {0} is present".format(self.name))
 
+        response = None
+
         try:
             response = self.web_client.web_apps.get(resource_group_name=self.resource_group,
                                                     name=self.name)
@@ -686,6 +716,8 @@ class AzureRMWebApps(AzureRMModuleBase):
                 self.plan['resource_group'], self.plan['name'])
             self.log("Response : {0}".format(response))
             self.log("App Service Plan : {0} found".format(response.name))
+
+            return response.as_dict()
         except CloudError as ex:
             self.log("Didn't find app service plan {0} in resource group {1}".format(
                 self.plan['name'], self.plan['resource_group']))
@@ -700,27 +732,46 @@ class AzureRMWebApps(AzureRMModuleBase):
         self.log("Create App Service Plan {0}".format(self.plan['name']))
 
         try:
-            response = self.web_client.app_service_plans.create_or_update(
-                self.plan['resource_group'], self.plan['name'])
-            self.log("Response : {0}".format(response))
-            self.log("App Service Plan : {0} found".format(response.name))
-
             # normalize sku
             sku = _normalize_sku(self.plan['sku'])
 
             sku_def = SkuDescription(tier=get_sku_name(
-                sku), name=sku, capacity=self.plan['number_of_workers'])
+                sku), name=sku, capacity=(self.plan['number_of_workers'] or None))
             plan_def = AppServicePlan(
-                self.plan['location'], app_service_plan_name=self.plan['name'], sku=sku_def, reserved=(reserved or None))
+                location=self.plan['location'], app_service_plan_name=self.plan['name'], sku=sku_def, reserved=(self.plan['is_linux'] or None))
 
-            response = self.web_clients.app_service_plans.create_or_update(
+            poller = self.web_client.app_service_plans.create_or_update(
                 self.plan['resource_group'], self.plan['name'], plan_def)
 
-        except CloudError as ex:
-            self.log("Failed to create app service plan {0} in resource group {1}".format(
-                self.plan['name'], self.plan['resource_group']))
+            if isinstance(poller, AzureOperationPoller):
+                response = self.get_poller_result(poller)
 
-        return False
+            self.log("Response : {0}".format(response))
+
+            return response.as_dict()
+        except CloudError as ex:
+            self.fail("Failed to create app service plan {0} in resource group {1}: {2}".format(
+                self.plan['name'], self.plan['resource_group'], str(ex)))
+
+    def list_app_settings(self):
+        '''
+        List application settings
+        :return: deserialized list response
+        '''
+        self.log("List application setting")
+
+        try:
+
+            response = self.web_client.web_apps.list_application_settings(
+                resource_group_name=self.resource_group, name=self.name)
+            self.log("Response : {0}".format(response))
+
+            return response
+        except CloudError as ex:
+            self.log("Failed to list application settings for web app {0} in resource group {1}".format(
+                self.name, self.resource_group))
+
+            return False
 
     def update_app_settings(self):
         '''
@@ -730,10 +781,11 @@ class AzureRMWebApps(AzureRMModuleBase):
         self.log("Update application setting")
 
         try:
-            response = self.web_client.web_client.update_application_settings(
-                self.plan.resource_group, self.name, self.app_settings)
+            response = self.web_client.web_apps.update_application_settings(
+                resource_group_name=self.resource_group, name=self.name, app_settings=self.app_settings_strDic)
             self.log("Response : {0}".format(response))
 
+            return response.as_dict()
         except CloudError as ex:
             self.log("Failed to update application settings for web app {0} in resource group {1}".format(
                 self.name, self.resource_group))
@@ -747,26 +799,21 @@ class AzureRMWebApps(AzureRMModuleBase):
         '''
         self.log("Update site source control")
 
-        if self.site_source_control is None:
+        if self.deployment_source is None:
             return False
 
-        self.site_source_control['is_manual_integration'] = False
-        self.site_source_control['is_mercurial'] = False
+        self.deployment_source['is_manual_integration'] = False
+        self.deployment_source['is_mercurial'] = False
 
         try:
             response = self.web_client.web_client.create_or_update_source_control(
-                self.resource_group, self.name, self.site_source_control)
+                self.resource_group, self.name, self.deployment_source)
             self.log("Response : {0}".format(response))
 
+            return response.as_dict()
         except CloudError as ex:
-            self.log("Failed to update site source control for web app {0} in resource group {1}".format(
+            self.fail("Failed to update site source control for web app {0} in resource group {1}".format(
                 self.name, self.resource_group))
-
-        return False
-
-    def validate_linux_create_options(self, linux_fx_version=None, container_settings=None):
-        opts = [linux_fx_version, container_settings]
-        return len([x for x in opts if x]) == 1
 
 
 def main():
