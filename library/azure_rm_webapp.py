@@ -30,104 +30,135 @@ options:
         description:
             - Unique name of the app to create or update. To create or update a deployment slot, use the {slot} parameter.
         required: True
-    kind:
-        description:
-            - Kind of resource.
+
     location:
         description:
             - Resource location. If not set, location from the resource group will be used as default.
-    enabled:
-        description:
-            - <code>true</code> if the app is enabled; otherwise, <code>false</code>. Setting this value to false disables the app (takes the app offline).
 
-    server_farm_id:
+    plan:
         description:
-            - "Resource ID of the associated App Service plan, formatted as:
-               '/subscriptions/{subscriptionID}/resourceGroups/{groupName}/providers/Microsoft.Web/serverfarms/{appServicePlanName}'."
-    reserved:
-        description:
-            - <code>true</code> if reserved; otherwise, <code>false</code>.
-
-    scm_site_also_stopped:
-        description:
-            - <code>true</code> to stop SCM (KUDU) site when the app is stopped; otherwise, <code>false</code>. The default is <code>false</code>.
-    hosting_environment_profile:
-        description:
-            - App Service Environment to use for the app.
+            - App Service Plan.
         suboptions:
-            id:
+            name:
+                description: 
+                    - Name of app service lan.
+                required: true
+            resoruce_group:
+                description: 
+                    - Resource group name of app service plan.
+            sku:
+                description: 
+                    - Sku of app service plan. Eg. B1, B2, B3, D1, F1, FREE, P1, P1V2, P2, P2V2, P3, P3V2, S1, S2, S3, SHARED. 
+                    - Please refer to https://azure.microsoft.com/en-us/pricing/details/app-service/linux/ for detail.
+            is_linux:
+                description: 
+                    - Indicate is linux app service plan.
+                default: False
+            number_of_workers:
+                description: 
+                    - Number of workers.
+    net_framework_version:
+        description:
+            - The version used to run your web app if using .NET Framework, e.g., 'v4.0' for .NET 4.6 and 'v3.0' for .NET 3.5
+            - Only applys for windows web app.
+
+    java_version:
+        description:
+            - The version used to run your web app if using Java, e.g., '1.7' for Java 7, '1.8' for Java 8.
+            - Only applys for windows web app.
+    
+    php_version:
+        description:
+            - The version used to run your web app if using PHP, e.g., 5.5, 5.6, 7.0.
+            - Only applys for windows web app.
+
+    python_version:
+        description:
+            - The version used to run your web app if using Python, e.g., 2.7, 3.4.
+            - Only applys for windows web app.
+
+    linux_fx_version:
+        description:
+            - The runtime stack used for your linux-based webapp, e.g., "RUBY|2.3", "NODE|6.6", "PHP|5.6", "DOTNETCORE|1.1.0". 
+            - Only applys for linx web app. See https://aka.ms/linux-stacks for more info.
+
+    java_container_settings:
+        description: Java container settings.
+        suboptions:
+            name:
+                description: The java container, e.g., Tomcat, Jetty.
+            value:
+                description: The version of the java container, e.g., '8.0.23' for Tomcat.
+
+    container_settings:
+        description: Web app container settings.
+        suboptions:
+            name:
+                description: Name of container. eg. imagename:tag
+            registry_server_url:
+                description: Container registry server url. eg. mydockerregistry.io
+            registry_server_user:
+                description: The container registry server user name.
+            registry_server_password:
                 description:
-                    - Resource ID of the App Service Environment.
+                    - The container registry server password.
+    
+    scm_type:
+        description:
+            - Repository type of deployment source. Eg. LocalGit, GitHub.
+    
+    deployment_source:
+        description:
+            - Deployment source for git
+
+            suboptions:
+                url:
+                    description:
+                        - Repository url of deployment source.
+                
+                branch:
+                    description:
+                        - The branch name of the repository.
+    startup_file:
+        description:
+            - The web's startup file.
+            - This only applys for linux web app.
+        
+
     client_affinity_enabled:
         description:
-            - "<code>true</code> to enable client affinity; <code>false</code> to stop sending session affinity cookies, which route client requests in the
-               same session to the same instance. Default is <code>true</code>."
-    client_cert_enabled:
-        description:
-            - "<code>true</code> to enable client certificate authentication (TLS mutual authentication); otherwise, <code>false</code>. Default is
-               <code>false</code>."
-
-    host_names_disabled:
-        description:
-            - <code>true</code> to disable the public hostnames of the app; otherwise, <code>false</code>.
-            -  If <code>true</code>, the app is only accessible via API management process.
-
-    container_size:
-        description:
-            - Size of the function container.
-
-    daily_memory_time_quota:
-        description:
-            - Maximum allowed daily memory-time quota (applicable on dynamic apps only).
+            - True to enable client affinity; False to stop sending session affinity cookies, which route client requests in the
+            - same session to the same instance.
+        default: True
 
     https_only:
         description:
-            - "HttpsOnly: configures a web site to accept only https requests. Issues redirect for"
-            - http requests
-    identity:
-        description:
-        suboptions:
-            type:
-                description:
-                    - Type of managed service identity.
+            - Configures web site to accept only https requests.
+
     skip_dns_registration:
         description:
             - If true web app hostname is not registered with DNS on creation. This parameter is
-            -  only used for app creation.
+            - only used for app creation.
+
     skip_custom_domain_verification:
         description:
             - If true, custom (non *.azurewebsites.net) domains associated with web app are not verified.
+
     force_dns_registration:
         description:
             - If true, web app hostname is force registered with DNS.
+
     ttl_in_seconds:
         description:
-            - "Time to live in seconds for web app's default domain name."
-    site_config:
+            - Time to live in seconds for web app's default domain name.
+    
+    app_settings:
         description:
-            - Site Configuration.
-        suboptions:
-            app_settings:
-                description: List of application settings.
-                key:
-                    description: Key of application setting.
-                value:
-                    description: Value of application setting.
-            java_container:
-                description: Java container.
-                default: ""
-            java_version:
-                description: Java version.
-            linux_fx_version:
-                description: Linux App Framework and version
-            always_on:
-                description: True if Always On is enabled; Otherwise, False.
-                default: True
-            number_of_works:
-                description: Number of workers.
-                default: 1
-
-
+            - Configure web app application settings. Suboptions are in format: <yourKey>: <yourValue>.
+    
+    purge_app_settings:
+        description:
+            - Purge any existing application settings. Replace web app application settings with app_settings.
 
     state:
       description:
@@ -147,15 +178,57 @@ author:
 '''
 
 EXAMPLES = '''
-  - name: Create (or update) Web App
+  - name: 1 - Create a windows web app with non-exist app service plan
     azure_rm_webapp:
-      resource_group: NOT FOUND
-      name: NOT FOUND
-      location: eastus
-      skip_dns_registration: NOT FOUND
-      skip_custom_domain_verification: NOT FOUND
-      force_dns_registration: NOT FOUND
-      ttl_in_seconds: NOT FOUND
+        resource_group: "{{ resource_group }}"
+        name: "{{ win_app_name }}1"
+        plan:
+          resource_group: "{{ plan_resource_group }}"
+          name: "{{ win_plan_name }}"
+          is_linux: false
+          sku: S1
+  
+  - name: 2 - create a docker web app with some app settings, with docker image
+    azure_rm_webapp:
+        resource_group: myresourcegroup
+        name: mydockerwebapp
+        plan:
+          resource_group: appserviceplan_test
+          name: myappplan
+          is_linux: true
+          sku: S1
+          number_of_workers: 2
+        app_settings:
+          testkey: "testvalue"
+          testkey2: "testvalue2"
+        container_settings:
+          name: "ansible/ansible:ubuntu1404"
+    
+  - name: 6 - create a docker web app with private acr registry
+    azure_rm_webapp:
+        resource_group: myresourcegroup
+        name: mydockerwebapp
+        plan:
+          name: myappplan
+        app_settings:
+          testkey: "testvalue"
+        container_settings:
+          name: "ansible:ubuntu1404"
+          registry_server_url: myregistry.io
+          registry_server_user: user
+          registry_server_password: pass
+    
+  - name: 3 - create a linux web app with Node 6.6 framework
+    azure_rm_webapp:
+        resource_group: myresourcegroup
+        name: mylinuxwebapp
+        plan:
+          resource_group: appserviceplan_test
+          name: myappplan
+        app_settings:
+          testkey: "testvalue"
+        linux_fx_version: "node|6.6"    
+
 '''
 
 RETURN = '''
@@ -272,7 +345,7 @@ class AzureRMWebApps(AzureRMModuleBase):
                 options=app_service_plan_spec
             ),
             net_framework_version=dict(
-                type='str',
+                type='str'
             ),
             java_version=dict(
                 type='str',
@@ -295,14 +368,11 @@ class AzureRMWebApps(AzureRMModuleBase):
                 options=container_settings_spec
             ),
             scm_type=dict(
-                type='dict',
+                type='str',
             ),
             deployment_source=dict(
                 type='dict',
                 options=deployment_source_spec
-            ),
-            git_token=dict(
-                type='str'
             ),
             startup_file=dict(
                 type='str'
@@ -332,6 +402,10 @@ class AzureRMWebApps(AzureRMModuleBase):
             app_settings=dict(
                 type='dict'
             ),
+            purge_app_settings=dict(
+                type='bool',
+                default=False
+            )
             state=dict(
                 type='str',
                 default='present',
@@ -369,9 +443,26 @@ class AzureRMWebApps(AzureRMModuleBase):
         # property for internal usage, not used for sdk
         self.container_settings = None
 
+        self.purge_app_settings = False
+
         self.results = dict(changed=False)
         self.state = None
         self.to_do = Actions.NoAction
+
+        # set site_config value from kwargs
+        self.site_config_properties = ["net_framework_version",
+                                       "java_version",
+                                       "php_version",
+                                       "python_version",
+                                       "linux_fx_version",
+                                       "scm_type"]
+
+        # updatable_properties
+        self.updatable_properties = ["client_affinity_enabled",
+                                     "force_dns_registration",
+                                     "https_only",
+                                     "skip_custom_domain_verification",
+                                     "ttl_in_seconds"]
 
         super(AzureRMWebApps, self).__init__(derived_arg_spec=self.module_arg_spec,
                                              supports_check_mode=True,
@@ -380,41 +471,21 @@ class AzureRMWebApps(AzureRMModuleBase):
     def exec_module(self, **kwargs):
         """Main module execution method"""
 
-        # for key in list(self.module_arg_spec.keys()) + ['tags']:
-        #     setattr(self, key, kwargs[key])
         setattr(self, 'tags', kwargs['tags'])
-
-        # set site_config value from kwargs
-        site_config_properties = ["net_framework_version",
-                                  "java_version",
-                                  "php_version",
-                                  "python_version",
-                                  "linux_fx_version"]
-
-        # updatable_properties
-        updatable_properties = ["client_affinity_enabled",
-                                "force_dns_registration",
-                                "https_only",
-                                "skip_custom_domain_verification",
-                                "skip_dns_registration",
-                                "ttl_in_seconds"]
 
         for key in list(self.module_arg_spec.keys()):
             if hasattr(self, key):
                 setattr(self, key, kwargs[key])
             elif kwargs[key] is not None:
-                if key in site_config_properties:
+                if key in self.site_config_properties:
 
                     self.site_config[key] = kwargs[key]
+
                 if key == "java_container_settings":
                     if 'name' in kwargs['java_container_settings']:
                         self.site_config['java_container'] = kwargs['java_container_settings']['name']
                     if 'version' in kwargs['java_container_settings']:
                         self.site_config['java_container_version'] = kwargs['java_container_settings']['version']
-
-                # if key == "deployment_source":
-                #     self.site_source_control['repo_url'] = kwargs['deployment_source']['url']
-                #     self.site_source_control['branch'] = kwargs['deployment_source']['branch']
 
         # start main flow
         old_response = None
@@ -547,17 +618,37 @@ class AzureRMWebApps(AzureRMModuleBase):
                                      site_config=self.site_config)
 
                     # if root level property changed, call create_or_update
-                    if self.is_updatable_property_changed(old_response) or is_site_config_fx_version_changed(old_response):
+                    if self.is_updatable_property_changed(old_response):
 
                         to_be_updated = True
                         response = self.create_update_webapp()
 
+                    # check if site_config changed
+                    old_config = self.get_webapp_configuration()
+
+                    if (old_config):
+                        if self.is_site_config_changed(old_config):
+
+                            to_be_updated = True
+                            response = self.create_update_webapp()
+
                     # get existing app_settings
                     self.app_settings_strDic = self.list_app_settings()
 
-                    if self.is_app_settings_changed():
-                        # if app_settings changed, call create_or_update_appsetting
+                    # purge existing app_settings:
+                    if self.purge_app_settings:
                         self.app_settings_strDic.properties = dict()
+
+                        if self.app_settings is not None:
+                            for key in self.app_settings.keys():
+                                self.app_settings_strDic.properties[key] = self.app_settings[key]
+
+                        to_be_updated = True
+                        update_as_response = self.update_app_settings()
+
+                    # merge app_settings
+                    elif self.is_app_settings_changed():
+                        # if app_settings changed, call create_or_update_appsetting
                         for key in self.app_settings.keys():
                             self.app_settings_strDic.properties[key] = self.app_settings[key]
 
@@ -596,17 +687,18 @@ class AzureRMWebApps(AzureRMModuleBase):
 
     # compare existing web app with input, determine weather it's update operation
     def is_updatable_property_changed(self, existing_webapp):
-        for property in updatable_properties:
-            if hasattr(self, property_name) and getattr(self, property_name) != property_value:
+        for property_name in self.updatable_properties:
+            if hasattr(self, property_name) and getattr(self, property_name) != existing_webapp.get(property_name, None):
                 return True
 
         return False
 
     # compare xxx_version
-    def is_site_config_fx_version_changed(self, existing_webapp):
-        for fx_version in site_config_properties:
-            if self.site_config.get(fx_version, None) != existing_webapp.get(fx_version, None):
-                return True
+    def is_site_config_changed(self, existing_config):
+        for fx_version in self.site_config_properties:
+            if fx_version in self.site_config:
+                if self.site_config.get(fx_version) != getattr(existing_config, fx_version):
+                    return True
 
         return False
 
@@ -814,6 +906,26 @@ class AzureRMWebApps(AzureRMModuleBase):
         except CloudError as ex:
             self.fail("Failed to update site source control for web app {0} in resource group {1}".format(
                 self.name, self.resource_group))
+
+    def get_webapp_configuration(self):
+        '''
+        Get  web app configuration
+        :return: deserialized  web app configuration response
+        '''
+        self.log("Get web app configuration")
+
+        try:
+
+            response = self.web_client.web_apps.get_configuration(
+                resource_group_name=self.resource_group, name=self.name)
+            self.log("Response : {0}".format(response))
+
+            return response
+        except CloudError as ex:
+            self.log("Failed to get configuration for web app {0} in resource group {1}: {2}".format(
+                self.name, self.resource_group), ex)
+
+            return False
 
 
 def main():
