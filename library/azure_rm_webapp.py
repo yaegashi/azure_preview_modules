@@ -401,7 +401,7 @@ class AzureRMWebApps(AzureRMModuleBase):
             windows_framework=dict(
                 type='dict',
                 options=windows_framework_spec
-            )
+            ),
             linux_framework=dict(
                 type='dict',
                 options=linux_framework_spec
@@ -530,10 +530,10 @@ class AzureRMWebApps(AzureRMModuleBase):
             elif kwargs[key] is not None:
                 if key == 'scm_type':
                     self.site_config[key] = kwargs[key]
-                if key == 'windows_framework'
+                if key == 'windows_framework':
                     for win_framework_key in list(kwargs[key]):
                         self.site_config[win_framework_key] = kwargs[key][win_framework_key]
-                if key == 'linux_framework'
+                if key == 'linux_framework':
                     self.site_config['linux_fx_version'] = (kwargs[key]['name'] + '|' + kwargs[key]['version']).upper()
 
                 if key == "java_container_settings":
@@ -600,7 +600,7 @@ class AzureRMWebApps(AzureRMModuleBase):
         if not old_response:
             self.log("Web App instance doesn't exist")
 
-            else:                
+            if self.state == "present":
                 to_be_updated = True
                 self.to_do = Actions.CreateOrUpdate
 
@@ -695,11 +695,11 @@ class AzureRMWebApps(AzureRMModuleBase):
             if self.check_mode:
                 return self.results
 
-            if self.to_do == Actions.CreateOrUpdate
+            if self.to_do == Actions.CreateOrUpdate:
                 response = self.create_update_webapp()
                 self.results['ansible_facts']['azure_webapp'] = response
 
-            if self.to_do = Actions.UpdateAppSettings
+            if self.to_do = Actions.UpdateAppSettings:
                 response = self.update_app_settings()
                 self.results['ansible_facts']['azure_webapp']['app_settings'] = response
 
