@@ -151,20 +151,17 @@ options:
             - Configures web site to accept only https requests.
         type: bool
 
-    skip_dns_registration:
+    dns_registration:
         description:
             - If true web app hostname is not registered with DNS on creation. This parameter is
             - only used for app creation.
-        type: bool
+        choices:
+            - skip
+            - force
 
     skip_custom_domain_verification:
         description:
             - If true, custom (non *.azurewebsites.net) domains associated with web app are not verified.
-        type: bool
-
-    force_dns_registration:
-        description:
-            - If true, web app hostname is force registered with DNS.
         type: bool
 
     ttl_in_seconds:
@@ -340,6 +337,14 @@ linux_framework_spec = dict(
     version=dict(type='str', required=True)
 )
 
+windows_framework_spec = dict(
+    net_framework_version=dict(type='str'),
+    php_version=dict(type='str'),
+    python_version=dict(type='str'),
+    node_version=dict(type='str'),
+    java_version=dict(type='str')
+)
+
 def _normalize_sku(sku):
     if sku is None:
         return sku
@@ -394,7 +399,8 @@ class AzureRMWebApps(AzureRMModuleBase):
                 type='raw'
             ),
             windows_framework=dict(
-                type='dict'
+                type='dict',
+                options=windows_framework_spec
             )
             linux_framework=dict(
                 type='dict',
@@ -425,13 +431,12 @@ class AzureRMWebApps(AzureRMModuleBase):
                 type='bool',
                 default=True
             ),
-            force_dns_registration=dict(
-                type='bool'
+            dns_registration=dict(
+                type='str',
+                default=None,
+                choices=['skip','force']
             ),
             https_only=dict(
-                type='bool'
-            ),
-            skip_dns_registration=dict(
                 type='bool'
             ),
             skip_custom_domain_verification=dict(
@@ -454,17 +459,18 @@ class AzureRMWebApps(AzureRMModuleBase):
             )
         )
 
+        mutually_exclusive = [['windows_framework', 'linux_framework']]
+
         self.resource_group = None
         self.name = None
         self.location = None
 
         # update in create_or_update as parameters
         self.client_affinity_enabled = True
-        self.force_dns_registration = None
-        self.skip_dns_registration = None
+        self.dns_registration = None
         self.skip_custom_domain_verification = None
         self.ttl_in_seconds = None
-        self.https_only = None
+        self.https_only = None        
 
         self.tags = None
 
@@ -494,6 +500,7 @@ class AzureRMWebApps(AzureRMModuleBase):
         self.state = None
         self.to_do = Actions.NoAction
 
+        self.windows_framework = None
         # set site_config value from kwargs        
         self.site_config_updatable_properties = ["net_framework_version",
                                        "java_version",
@@ -510,6 +517,7 @@ class AzureRMWebApps(AzureRMModuleBase):
                                      "ttl_in_seconds"]
 
         super(AzureRMWebApps, self).__init__(derived_arg_spec=self.module_arg_spec,
+                                             mutually_exclusive=mutually_exclusive,
                                              supports_check_mode=True,
                                              supports_tags=True)
 
@@ -527,30 +535,27 @@ class AzureRMWebApps(AzureRMModuleBase):
                         self.site_config[win_framework_key] = kwargs[key][win_framework_key]
                 if key == 'linux_framework'
                     self.site_config['linux_fx_version'] = (kwargs[key]['name'] + '|' + kwargs[key]['version']).upper()
-                # if key in self.site_config_properties:
-
-                #     self.site_config[key] = kwargs[key]
 
                 if key == "java_container_settings":
                     if 'name' in kwargs['java_container_settings']:
                         self.site_config['java_container'] = kwargs['java_container_settings']['name']
                     if 'version' in kwargs['java_container_settings']:
-                        self.site_config['java_container_version'] = kwargs['java_container_settings']['version']
+                        self.site_config['java_container_version'] = kwargs['java_container_settings']['version']        
 
         old_response = None
         response = None
         to_be_updated = False
 
-        # windows_framework and linux_framework is mutual
-        if self.windows_framework and self.linux_framework:
-            self.fail('Cannot specify windows_framework and linux_framework at same time.')
+        if self.windows_framework is not None:
+            if self.windows_framework['java_version'] and len(self.windows_framework) > 1:
+                self.fail('java_version is mutually exclusive with other framework version in windows_framework.')
 
         if self.app_settings is None:
             self.app_settings = dict()
 
         if self.plan:
             self.plan = self.parse_plan()
-
+        
         if self.container_settings is not None:
             if hasattr(self.site_config, 'linux_fx_version'):
                 self.fail(
@@ -627,7 +632,7 @@ class AzureRMWebApps(AzureRMModuleBase):
                 # linux_fx_version is mapping to sdk linux_fx_version, which is only for linux web app
                 # linux_fx_version for docker web app is like DOCKER|imagename:tag
                 # xxx_version is mapping to sdk xxx_version, which is only for windows web app
-                if old_plan['is_linux']:
+                if hasattr(old_plan, 'is_linux'):
                     if hasattr(self, 'startup_file'):
                         self.site_config['app_command_line'] = self.startup_file
 
@@ -654,14 +659,14 @@ class AzureRMWebApps(AzureRMModuleBase):
                 # check if root level property changed
                 if self.is_updatable_property_changed(old_response):
                     to_be_updated = True
-                    self.to_do = Action.CreateOrUpdate
+                    self.to_do = Actions.CreateOrUpdate
 
                 # check if site_config changed
                 old_config = self.get_webapp_configuration()
 
                 if self.is_site_config_changed(old_config):
                     to_be_updated = True
-                    self.to_do = Action.CreateOrUpdate
+                    self.to_do = Actions.CreateOrUpdate
 
                 # check if purge app_settings
                 self.app_settings_strDic = self.list_app_settings()
@@ -673,7 +678,7 @@ class AzureRMWebApps(AzureRMModuleBase):
                 # check if app settings changed
                 if self.purge_app_settings or self.is_app_settings_changed():
                     to_be_updated = True
-                    self.to_do = Action.UpdateAppSettings
+                    self.to_do = Actions.UpdateAppSettings
 
                     if self.app_settings is not None:
                         for key in self.app_settings.keys():
@@ -730,9 +735,10 @@ class AzureRMWebApps(AzureRMModuleBase):
     # compare xxx_version
     def is_site_config_changed(self, existing_config):
         for fx_version in self.site_config_updatable_properties:
-            if fx_version in self.site_config:
-                if self.site_config.get(fx_version).upper() != getattr(existing_config, fx_version).upper():
-                    return True
+            if self.site_config.get(fx_version, None) is not None:
+                if not getattr(existing_config, fx_version) or \
+                    getattr(existing_config, fx_version).upper() != self.site_config.get(fx_version).upper():
+                        return True
 
         return False
 
@@ -772,12 +778,15 @@ class AzureRMWebApps(AzureRMModuleBase):
             "Creating / Updating the Web App instance {0}".format(self.name))
 
         try:
+            skip_dns_registration = None if not self.dns_registration or self.dns_registration == "skip"
+            force_dns_registration = None if not self.dns_registration or self.dns_registration == "force"
+
             response = self.web_client.web_apps.create_or_update(resource_group_name=self.resource_group,
                                                                  name=self.name,
                                                                  site_envelope=self.site,
-                                                                 skip_dns_registration=self.skip_dns_registration,
+                                                                 skip_dns_registration=skip_dns_registration,
                                                                  skip_custom_domain_verification=self.skip_custom_domain_verification,
-                                                                 force_dns_registration=self.force_dns_registration,
+                                                                 force_dns_registration=force_dns_registration,
                                                                  ttl_in_seconds=self.ttl_in_seconds)
             if isinstance(response, AzureOperationPoller):
                 response = self.get_poller_result(response)
