@@ -226,8 +226,7 @@ EXAMPLES = '''
       azure_rm_webapp:
         resource_group: myresourcegroup
         name: mydockerwebapp
-        plan:
-          name: myappplan
+        plan: myappplan
         app_settings:
           testkey: testvalue
         container_settings:
@@ -245,7 +244,9 @@ EXAMPLES = '''
           name: myappplan
         app_settings:
           testkey: testvalue
-        linux_fx_version: node|6.6
+        linux_framework:
+          name: node
+          version: 6.6
 '''
 
 RETURN = '''
@@ -356,7 +357,6 @@ def _normalize_sku(sku):
         return 'D1'
     return sku
 
-
 def get_sku_name(tier):
     tier = tier.upper()
     if tier == 'F1' or tier == "FREE":
@@ -373,7 +373,6 @@ def get_sku_name(tier):
         return 'PREMIUMV2'
     else:
         return None
-
 
 class Actions:
     NoAction, CreateOrUpdate, UpdateAppSettings, Delete = range(4)
@@ -399,8 +398,7 @@ class AzureRMWebApps(AzureRMModuleBase):
                 type='raw'
             ),
             windows_framework=dict(
-                type='dict',
-                options=windows_framework_spec
+                type='dict'
             ),
             linux_framework=dict(
                 type='dict',
@@ -422,9 +420,6 @@ class AzureRMWebApps(AzureRMModuleBase):
                 options=deployment_source_spec
             ),
             startup_file=dict(
-                type='str'
-            ),
-            linux_fx_version=dict(
                 type='str'
             ),
             client_affinity_enabled=dict(
@@ -506,7 +501,6 @@ class AzureRMWebApps(AzureRMModuleBase):
                                        "java_version",
                                        "php_version",
                                        "python_version",
-                                       "linux_fx_version",
                                        "scm_type"]
 
         # updatable_properties
@@ -528,27 +522,33 @@ class AzureRMWebApps(AzureRMModuleBase):
             if hasattr(self, key):
                 setattr(self, key, kwargs[key])
             elif kwargs[key] is not None:
-                if key == 'scm_type':
+                if key == "scm_type":
                     self.site_config[key] = kwargs[key]
-                if key == 'windows_framework':
-                    for win_framework_key in list(kwargs[key]):
+                if key == "windows_framework":
+                    for win_framework_key in list(kwargs[key].keys()):
                         self.site_config[win_framework_key] = kwargs[key][win_framework_key]
-                if key == 'linux_framework':
+                
+                # azure sdk linux_fx_version:
+                # for docker web app, value is like DOCKER|imagename:tag
+                # for linux web app, value is like NODE|6.6
+                if key == "linux_framework":
                     self.site_config['linux_fx_version'] = (kwargs[key]['name'] + '|' + kwargs[key]['version']).upper()
 
                 if key == "java_container_settings":
                     if 'name' in kwargs['java_container_settings']:
                         self.site_config['java_container'] = kwargs['java_container_settings']['name']
                     if 'version' in kwargs['java_container_settings']:
-                        self.site_config['java_container_version'] = kwargs['java_container_settings']['version']        
+                        self.site_config['java_container_version'] = kwargs['java_container_settings']['version']
 
         old_response = None
         response = None
         to_be_updated = False
 
         if self.windows_framework is not None:
-            if self.windows_framework['java_version'] and len(self.windows_framework) > 1:
+            if hasattr(self.windows_framework, 'java_version') and len(self.windows_framework) > 1:
                 self.fail('java_version is mutually exclusive with other framework version in windows_framework.')
+            for key in list(self.windows_framework.keys()):
+                self.site_config[key] = self.windows_framework[key]
 
         if self.app_settings is None:
             self.app_settings = dict()
@@ -625,13 +625,7 @@ class AzureRMWebApps(AzureRMModuleBase):
                 plan_id = old_plan['id']
                 self.site.server_farm_id=plan_id
 
-                # if hasattr(old_plan, "is_linux"):
-                #     old_plan['reserved'] = old_plan['is_linux']
-
-                # if linux, setup linux_fx_version
-                # linux_fx_version is mapping to sdk linux_fx_version, which is only for linux web app
-                # linux_fx_version for docker web app is like DOCKER|imagename:tag
-                # xxx_version is mapping to sdk xxx_version, which is only for windows web app
+                # if linux, setup startup_file
                 if hasattr(old_plan, 'is_linux'):
                     if hasattr(self, 'startup_file'):
                         self.site_config['app_command_line'] = self.startup_file
@@ -699,7 +693,7 @@ class AzureRMWebApps(AzureRMModuleBase):
                 response = self.create_update_webapp()
                 self.results['ansible_facts']['azure_webapp'] = response
 
-            if self.to_do = Actions.UpdateAppSettings:
+            if self.to_do == Actions.UpdateAppSettings:
                 response = self.update_app_settings()
                 self.results['ansible_facts']['azure_webapp']['app_settings'] = response
 
@@ -778,8 +772,8 @@ class AzureRMWebApps(AzureRMModuleBase):
             "Creating / Updating the Web App instance {0}".format(self.name))
 
         try:
-            skip_dns_registration = None if not self.dns_registration or self.dns_registration == "skip"
-            force_dns_registration = None if not self.dns_registration or self.dns_registration == "force"
+            skip_dns_registration = None if not self.dns_registration else (self.dns_registration == "skip")
+            force_dns_registration = None if not self.dns_registration else (self.dns_registration == "force")
 
             response = self.web_client.web_apps.create_or_update(resource_group_name=self.resource_group,
                                                                  name=self.name,
