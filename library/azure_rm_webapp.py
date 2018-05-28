@@ -52,37 +52,44 @@ options:
         description:
             - Describe windows web app framework. See https://docs.microsoft.com/en-us/azure/app-service/app-service-web-overview for more info.
             - Can set mulitple framework at same time.
+            - suboption java_version is mutually exclusive with other suboptions
         suboptions:
             net_framework_version:
                 description:
                     - The version used to run your web app if using .NET Framework, e.g., 'v4.0' for .NET 4.6 and 'v3.0' for .NET 3.5
                     - Only applys for windows web app.
+                    - mutually exclusive with java_version
 
             java_version:
                 description:
                     - The version used to run your web app if using Java, e.g., '1.7' for Java 7, '1.8' for Java 8.
                     - Only applys for windows web app.
+                    - mutually exclusive with other suboptions
 
             php_version:
                 description:
                     - The version used to run your web app if using PHP, e.g., 5.5, 5.6, 7.0.
                     - Only applys for windows web app.
+                    - mutually exclusive with java_version
 
             python_version:
                 description:
                     - The version used to run your web app if using Python, e.g., 2.7, 3.4.
                     - Only applys for windows web app.
+                    - mutually exclusive with java_version
 
             node_version:
                 description:
                     - The version used to run your web app if using nodejs, e.g., 6.6, 6.9.
                     - Only applys for windows web app.
+                    - mutually exclusive with java_version
 
 
     linux_framework:        
         description:
             - The runtime stack used for your linux-based webapp, e.g., 'RUBY|2.3', 'NODE|6.9', 'PHP|5.6', 'DOTNETCORE|1.1.0', 'JAVA|8.0'.
             - Only applys for linux web app. See https://aka.ms/linux-stacks for more info.
+            - mutually exclusive with windows_framework
         suboptions:
             name:
                 description:
@@ -305,8 +312,7 @@ from ansible.module_utils.azure_rm_common import AzureRMModuleBase
 
 try:
     from msrestazure.azure_exceptions import CloudError
-    from msrestazure.azure_operation import AzureOperationPoller    
-    from msrestazure.tools import parse_resource_id, resource_id, is_valid_resource_id
+    from msrestazure.azure_operation import AzureOperationPoller
     from msrest.serialization import Model    
     from azure.mgmt.web.models import (
         site_config, app_service_plan, Site,
@@ -501,6 +507,7 @@ class AzureRMWebApps(AzureRMModuleBase):
                                        "java_version",
                                        "php_version",
                                        "python_version",
+                                       "linux_fx_version",
                                        "scm_type"]
 
         # updatable_properties
@@ -524,9 +531,6 @@ class AzureRMWebApps(AzureRMModuleBase):
             elif kwargs[key] is not None:
                 if key == "scm_type":
                     self.site_config[key] = kwargs[key]
-                if key == "windows_framework":
-                    for win_framework_key in list(kwargs[key].keys()):
-                        self.site_config[win_framework_key] = kwargs[key][win_framework_key]
                 
                 # azure sdk linux_fx_version:
                 # for docker web app, value is like DOCKER|imagename:tag
@@ -554,20 +558,18 @@ class AzureRMWebApps(AzureRMModuleBase):
             self.app_settings = dict()
 
         if self.plan:
-            self.plan = self.parse_plan()
+            self.plan = self.parse_resource_to_dict(self.plan)
         
         if self.container_settings is not None:
             if hasattr(self.site_config, 'linux_fx_version'):
-                self.fail(
-                    "Cannot set linux_framework with container_settings at same time.")
+                self.fail("Cannot set linux_framework with container_settings at same time.")
 
             linux_fx_version = 'DOCKER|'
 
             if self.container_settings.get('registry_server_url', None) is not None:
-                self.app_settings['DOCKER_REGISTRY_SERVER_URL'] = 'https://' + \
-                    self.container_settings['registry_server_url']
+                self.app_settings['DOCKER_REGISTRY_SERVER_URL'] = 'https://' + self.container_settings['registry_server_url']
 
-                linux_fx_version += self.container_settings['registry_server_url']
+                linux_fx_version += self.container_settings['registry_server_url'] + '/'
 
             linux_fx_version += self.container_settings['name']
 
@@ -622,8 +624,7 @@ class AzureRMWebApps(AzureRMModuleBase):
 
                     old_plan = self.create_app_service_plan()
 
-                plan_id = old_plan['id']
-                self.site.server_farm_id=plan_id
+                self.site.server_farm_id = old_plan['id']
 
                 # if linux, setup startup_file
                 if hasattr(old_plan, 'is_linux'):
@@ -661,8 +662,11 @@ class AzureRMWebApps(AzureRMModuleBase):
                 if self.is_site_config_changed(old_config):
                     to_be_updated = True
                     self.to_do = Actions.CreateOrUpdate
+                
+                # check if linux_fx_version changed
+                if old_config.get('linux_fx_version', None) != linux_fx_version:
+                    self.to_do = Actions.CreateOrUpdate
 
-                # check if purge app_settings
                 self.app_settings_strDic = self.list_app_settings()
 
                 # purge existing app_settings:
@@ -709,14 +713,6 @@ class AzureRMWebApps(AzureRMModuleBase):
             self.log('Web App instance deleted')
 
         return self.results
-
-    def parse_plan(self):
-        if not self.plan:
-            return
-        resource_dict = parse_resource_id(self.plan) if not isinstance(self.plan, dict) else self.plan
-        resource_dict['resource_group'] = resource_dict.get('resource_group', self.resource_group)        
-        return resource_dict
-
 
     # compare existing web app with input, determine weather it's update operation
     def is_updatable_property_changed(self, existing_webapp):
