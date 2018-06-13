@@ -240,7 +240,7 @@ class AzureRMServersFacts(AzureRMModuleBase):
                 'name': d['name'],
                 'sku': d['sku'],
                 'location': d['location'],
-                'storage_mb': d['storage_mb'],
+                'storage_mb': d['storage_profile']['storage_mb'],
                 'version': d['version'],
                 'enforce_ssl': (d['ssl_enforcement'] == 'Enabled'),
                 'admin_username': d['administrator_login'],
