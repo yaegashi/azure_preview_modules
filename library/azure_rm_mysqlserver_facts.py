@@ -234,22 +234,22 @@ class AzureRMServersFacts(AzureRMModuleBase):
 
     def format_item(self, item):
         if self.format == 'curated':
-            d =  {'aaa': 'bbb'}
+            d = item.as_dict()
             d['ccc'] = 'ddd'
             return d
-            return {
-                'resource_group': self.resource_group,
-                'name': item.name,
-                'sku': item.sku,
-                'location': item.location,
-                'storage_mb': item.storage_profile.storage_mb,
-                'version': item.version,
-                'enforce_ssl': (item.ssl_enforcement == 'Enabled'),
-                'admin_username': item.administrator_login,
-                # admin_password
-                # create_mode
-                'state': 'present'
-            }
+            #return {
+            #    'resource_group': self.resource_group,
+            #    'name': item.name,
+            #    'sku': item.sku,
+            #    'location': item.location,
+            #    'storage_mb': item.storage_profile.storage_mb,
+            #    'version': item.version,
+            #    'enforce_ssl': (item.ssl_enforcement == 'Enabled'),
+            #    'admin_username': item.administrator_login,
+            #    # admin_password
+            #    # create_mode
+            #    'state': 'present'
+            #}
         else:
             return item.as_dict()
 
