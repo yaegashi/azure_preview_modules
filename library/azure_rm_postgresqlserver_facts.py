@@ -233,22 +233,23 @@ class AzureRMServersFacts(AzureRMModuleBase):
         return results
 
     def format_item(self, item):
+        d = item.as_dict()
         if self.format == 'curated':
-            return {
+            d = {
                 'resource_group': self.resource_group,
-                'name': item.name,
-                'sku': item.sku,
-                'location': item.location,
-                'storage_mb': item.storage_profile.storage_mb,
-                'version': item.version,
-                'enforce_ssl': (item.ssl_enforcement == 'Enabled'),
-                'admin_username': item.administrator_login,
+                'name': d['name'],
+                'sku': d['sku'],
+                'location': d['location'],
+                'storage_mb': d['storage_mb'],
+                'version': d['version'],
+                'enforce_ssl': (d['ssl_enforcement'] == 'Enabled'),
+                'admin_username': d['administrator_login'],
                 # admin_password
                 # create_mode
                 'state': 'present'
             }
-        else:
-            return item.as_dict()
+
+        return d
 
 
 def main():
