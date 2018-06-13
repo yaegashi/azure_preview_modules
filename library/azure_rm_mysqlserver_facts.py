@@ -234,7 +234,9 @@ class AzureRMServersFacts(AzureRMModuleBase):
 
     def format_item(self, item):
         if self.format == 'curated':
-            return {'aaa': 'bbb'}
+            d =  {'aaa': 'bbb'}
+            d['ccc'] = 'ddd'
+            return d
             return {
                 'resource_group': self.resource_group,
                 'name': item.name,
