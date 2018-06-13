@@ -244,8 +244,6 @@ class AzureRMServersFacts(AzureRMModuleBase):
                 'version': d['version'],
                 'enforce_ssl': (d['ssl_enforcement'] == 'Enabled'),
                 'admin_username': d['administrator_login'],
-                # admin_password
-                # create_mode
                 'state': 'present'
             }
 
