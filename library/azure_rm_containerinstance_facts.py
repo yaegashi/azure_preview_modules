@@ -198,27 +198,37 @@ class AzureRMContainerGroupsFacts(AzureRMModuleBase):
         return results
 
     def format_item(self, item):
+        d = item.as_dict()
         if self.format == 'curated':
-            return {
-                # resource_group
-                # name
-                # os_type
-                # ip_address
-                # ports
-                # location
-                # registry_login_server
-                # registry_login_username
-                # registry_password
-                # containers
-                #   name
-                #   image
-                #   memory
-                #   cpu
-                #   ports
-                # state
+            containers = d['containers']
+
+            for container_index in range(len(containers)):
+                old_container = containers[container_index]
+                new_container = {
+                    'name': old_container['name'],
+                    'image': old_container['image'],
+                    'memory': old_container['resources']['requests']['memory_in_gb'],
+                    'cpu': old_container['resources']['requests']['cpu'],
+                    'ports': []
+                }
+                for port_index in range(len(old_container['ports'])):
+                    new_container['ports'].append(old_container['ports'][port_index]['port'])
+                containers[container_index] = new_container
+
+            d = {
+                'resource_group': self.resource_group,
+                'name': d['name'],
+                'os_type': d['os_type'],
+                'ip_address': 'public' if d['ip_address']['type'] == 'Public' else 'none',
+                #ports
+                'location': d['location'],
+                #registry_login_server
+                #registry_login_username
+                #registry_password
+                'containers': containers,
+                'state': 'present'
             }
-        else:
-            return item.as_dict(item)
+        return d
 
 
 def main():
