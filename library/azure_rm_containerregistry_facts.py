@@ -230,7 +230,7 @@ class AzureRMRegistriesFacts(AzureRMModuleBase):
         return results
 
     def format_item(self, item):
-        d = item.to_dict()
+        d = item.as_dict()
         if self.format == 'curated':
             d = {
                 'resource_group': self.resource_group,
