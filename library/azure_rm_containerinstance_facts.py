@@ -218,7 +218,7 @@ class AzureRMContainerGroupsFacts(AzureRMModuleBase):
                 # state
             }
         else:
-            return self.format_item(item)
+            return self.as_dict(item)
 
 
 def main():
