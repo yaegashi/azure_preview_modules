@@ -174,11 +174,6 @@ class AzureRMServersFacts(AzureRMModuleBase):
         return self.results
 
     def get(self):
-        '''
-        Gets facts of the specified SQL Server.
-
-        :return: deserialized SQL Serverinstance state dictionary
-        '''
         response = None
         results = {}
         try:
@@ -194,11 +189,6 @@ class AzureRMServersFacts(AzureRMModuleBase):
         return results
 
     def list_by_resource_group(self):
-        '''
-        Gets facts of the specified SQL Server.
-
-        :return: deserialized SQL Serverinstance state dictionary
-        '''
         response = None
         results = {}
         try:

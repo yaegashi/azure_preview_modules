@@ -158,11 +158,6 @@ class AzureRMContainerGroupsFacts(AzureRMModuleBase):
         return self.results
 
     def get(self):
-        '''
-        Gets facts of the specified Container Group.
-
-        :return: deserialized Container Groupinstance state dictionary
-        '''
         response = None
         results = {}
         try:
@@ -178,11 +173,6 @@ class AzureRMContainerGroupsFacts(AzureRMModuleBase):
         return results
 
     def list_by_resource_group(self):
-        '''
-        Gets facts of the specified Container Group.
-
-        :return: deserialized Container Groupinstance state dictionary
-        '''
         response = None
         results = {}
         try:

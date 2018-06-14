@@ -190,11 +190,6 @@ class AzureRMRegistriesFacts(AzureRMModuleBase):
         return self.results
 
     def get(self):
-        '''
-        Gets facts of the specified Registry.
-
-        :return: deserialized Registryinstance state dictionary
-        '''
         response = None
         results = {}
         try:
@@ -210,11 +205,6 @@ class AzureRMRegistriesFacts(AzureRMModuleBase):
         return results
 
     def list_by_resource_group(self):
-        '''
-        Gets facts of the specified Registry.
-
-        :return: deserialized Registryinstance state dictionary
-        '''
         response = None
         results = {}
         try:

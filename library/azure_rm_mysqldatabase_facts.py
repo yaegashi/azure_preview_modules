@@ -170,11 +170,6 @@ class AzureRMDatabasesFacts(AzureRMModuleBase):
         return self.results
 
     def get(self):
-        '''
-        Gets facts of the specified MySQL Database.
-
-        :return: deserialized MySQL Databaseinstance state dictionary
-        '''
         response = None
         results = {}
         try:
@@ -191,11 +186,6 @@ class AzureRMDatabasesFacts(AzureRMModuleBase):
         return results
 
     def list_by_server(self):
-        '''
-        Gets facts of the specified MySQL Database.
-
-        :return: deserialized MySQL Databaseinstance state dictionary
-        '''
         response = None
         results = {}
         try:
