@@ -230,17 +230,17 @@ class AzureRMRegistriesFacts(AzureRMModuleBase):
         return results
 
     def format_item(self, item):
+        d = item.to_dict()
         if self.format == 'curated':
-            return {
-                # resource_group
-                # name
-                # state
-                # location
-                # admin_user_enabled
-                # sku
+            d = {
+                'resource_group': self.resource_group,
+                'name': self.registry_name,
+                'location': d['location']
+                'admin_user_enabled': d['admin_user_enabled'],
+                'sku': d['sku']['tier'].lower(),
+                'state': 'present'
             }
-        else:
-            return item.as_dict()
+        return d
 
 
 def main():
