@@ -201,6 +201,10 @@ class AzureRMContainerGroupsFacts(AzureRMModuleBase):
         d = item.as_dict()
         if self.format == 'curated':
             containers = d['containers']
+            ports = d['ip_address']['ports']
+
+            for port_index in range(len(ports)):
+                ports[port_index] = ports[port_index]['port']
 
             for container_index in range(len(containers)):
                 old_container = containers[container_index]
@@ -220,7 +224,7 @@ class AzureRMContainerGroupsFacts(AzureRMModuleBase):
                 'name': d['name'],
                 'os_type': d['os_type'],
                 'ip_address': 'public' if d['ip_address']['type'] == 'Public' else 'none',
-                #ports
+                'ports': ports,
                 'location': d['location'],
                 #registry_login_server
                 #registry_login_username
