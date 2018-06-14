@@ -328,27 +328,28 @@ class AzureRMDatabasesFacts(AzureRMModuleBase):
         return results
 
     def format_item(self, item):
+        d = item.as_dict()
         if self.format == 'curated':
-            return {
-                # resource_group
-                # server_name
-                # name
-                # location
-                # collation
-                # create_mode
-                # source_database_id
-                # restore_point_in_time
-                # recovery_services_recovery_....
-                # edition
-                # max_size_bytes
-                # elastic_pool_name
-                # read_scale
-                # sample_name
-                # zone_redundant
-                # state
+            d = {
+                'resource_group': self.resource_group,
+                'server_name': self.server_name,
+                'name': d['name'],
+                'location': d['location'],
+                'collation': d['collation'],
+                #'create_mode': 
+                #'source_database_id'
+                #'restore_point_in_time'
+                #'recovery_services_recovery_....'
+                #'edition'
+                'max_size_bytes': d['max_size_bytes'],
+                #'elastic_pool_name'
+                'read_scale': d['read_scale'],
+                #'sample_name'
+                'zone_redundant': d['zone_redundant'],
+                'state': 'present'
             }
-        else:
-            return item.as_dict()
+        return d
+
 
 
 def main():

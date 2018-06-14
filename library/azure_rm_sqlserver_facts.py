@@ -214,19 +214,17 @@ class AzureRMServersFacts(AzureRMModuleBase):
         return results
 
     def format_item(self, item):
+        d = item.to_dict()
         if self.format == 'curated':
-            return {
-                # resource_group
-                # name
-                # location
-                # admin_username
-                # admin_password
-                # version
-                # identity
-                # state
+            d = {
+                'resource_group': self.resource_group,
+                'name': d['name'],
+                'location': d['location'],
+                'admin_username': d['administrator_login'],
+                'version': d['version'],
+                'state': 'present'
             }
-        else:
-            return item.as_dict()
+        return d
 
 
 def main():
