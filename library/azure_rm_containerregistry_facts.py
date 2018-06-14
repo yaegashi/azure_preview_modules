@@ -235,7 +235,7 @@ class AzureRMRegistriesFacts(AzureRMModuleBase):
             d = {
                 'resource_group': self.resource_group,
                 'name': self.registry_name,
-                'location': d['location']
+                'location': d['location'],
                 'admin_user_enabled': d['admin_user_enabled'],
                 'sku': d['sku']['tier'].lower(),
                 'state': 'present'
