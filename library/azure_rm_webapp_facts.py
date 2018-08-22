@@ -136,6 +136,7 @@ webapps:
 '''
 try:
     from msrestazure.azure_exceptions import CloudError
+    from msrestazure.azure_operation import AzureOperationPoller
     from azure.common import AzureMissingResourceHttpError, AzureHttpError
 except:
     # This is handled in azure_rm_common
@@ -254,17 +255,33 @@ class AzureRMWebAppFacts(AzureRMModuleBase):
 
         return response.as_dict()
 
+    def get_publish_credentials(self, resource_group, name):
+        self.log('Get web app {0} publish credentials'.format(name))
+        try:
+            poller = self.web_client.web_apps.list_publishing_credentials(resource_group, name)
+            if isinstance(poller, AzureOperationPoller):
+                response = self.get_poller_result(poller)
+        except CloudError as ex:
+            request_id = ex.request_id if ex.request_id else ''
+            self.fail('Error getting web app {0} publishing credentials'.format(request_id, str(ex)))
+        return response
+
     def get_curated_webapp(self, resource_group, name, webapp):
         pip = self.serialize_obj(webapp, AZURE_OBJECT_CLASS)
 
         try:
             site_config = self.list_webapp_configuration(resource_group, name)
             app_settings = self.list_webapp_appsettings(resource_group, name)
+            publish_cred = self.get_publish_credentials(resource_group, name)
         except CloudError as ex:
             pass
-        return self.construct_curated_webapp(pip, site_config, app_settings)
+        return self.construct_curated_webapp(webapp=pip,
+                                             configuration=site_config,
+                                             app_settings=app_settings,
+                                             deployment_slot=None,
+                                             publish_credentials=publish_cred)
 
-    def construct_curated_webapp(self, webapp, configuration=None, app_settings=None, deployment_slot=None):
+    def construct_curated_webapp(self, webapp, configuration=None, app_settings=None, deployment_slot=None, publish_credentials=None):
         curated_output = dict()
         curated_output['id'] = webapp['id']
         curated_output['name'] = webapp['name']
@@ -312,6 +329,11 @@ class AzureRMWebAppFacts(AzureRMModuleBase):
         # curated deploymenet_slot
         if deployment_slot:
             curated_output['deployment_slot'] = deployment_slot
+
+        # curated publish credentials
+        if publish_credentials:
+            curated_output['publishing_username'] = publish_credentials.publishing_user_name
+            curated_output['publishing_password'] = publish_credentials.publishing_password
         return curated_output
 
 
