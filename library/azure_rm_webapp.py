@@ -422,7 +422,7 @@ class AzureRMWebApps(AzureRMModuleBase):
                 type='str',
                 choices=['start', 'stop', 'restart'],
                 default='start'
-            )
+            ),
             state=dict(
                 type='str',
                 default='present',
@@ -699,12 +699,23 @@ class AzureRMWebApps(AzureRMModuleBase):
             if self.to_do == Actions.CreateOrUpdate:
                 response = self.create_update_webapp()
 
-                if (response['properties']['state'] == 'Running' and self.power_action == 'stop') or
-                   (response['properties']['state'] == 'Stopped' and self.power_action == 'start') or
-                   self.power_action == 'restart':
-                    self.start_webapp(self.power_action)
-
                 self.results['id'] = response['id']
+
+        webapp = None
+        if old_response:
+            webapp = old_response
+        if response:
+            webapp = response
+
+        if webapp:
+            if (webapp['state'] != 'Stopped' and self.power_action == 'stop') or \
+               (webapp['state'] != 'Running' and self.power_action == 'start') or \
+                self.power_action == 'restart':
+
+                self.results['changed'] = True
+                if self.check_mode:
+                    return self.results
+                self.start_webapp(self.power_action)
 
         return self.results
 
@@ -971,7 +982,7 @@ class AzureRMWebApps(AzureRMModuleBase):
 
             self.log("Response : {0}".format(response))
 
-            return response.as_dict()
+            return response
         except CloudError as ex:
             request_id = ex.request_id if ex_request_id else ''
             self.log("Failed to {0} web app {1} in resource group {2}, request_id {3} - {4}".format(
