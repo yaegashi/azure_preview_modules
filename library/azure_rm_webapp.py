@@ -538,7 +538,7 @@ class AzureRMWebApps(AzureRMModuleBase):
             if old_plan:
                 is_linux = old_plan['reserved']
             else:
-                is_linux = self.plan['is_linux'] if 'is_linux' in self.plan else False
+                is_linux = self.plan['is_linux'] if 'is_linux' in self.plan else False    
 
             if self.frameworks:
                 # java is mutually exclusive with other frameworks
@@ -652,6 +652,27 @@ class AzureRMWebApps(AzureRMModuleBase):
 
                 if update_tags:
                     to_be_updated = True
+
+                # check if app service plan changed
+                if self.plan:
+                    existing_plan = self.parse_resource_to_dict(old_response['server_farm_id'])
+
+                    if self.plan['resource_group'] != existing_plan['resource_group'] and \
+                        self.plan['name'] != existing_plan['name']:
+                        to_be_updated = True
+
+                        # check if new plan exists
+                        new_plan = self.get_app_service_plan()
+                        if not new_plan:
+                            if (not self.plan.get('name') or not self.plan.get('sku')):
+                                self.fail('Please specify name, is_linux, sku in plan')
+
+                            if 'location' not in self.plan:
+                                plan_resource_group = self.get_resource_group(self.plan['resource_group'])
+                                self.plan['location'] = plan_resource_group.location
+
+                            new_plan = self.create_app_service_plan()
+                            self.site_config['server_farm_id'] = new_plan['id']
 
                 # check if root level property changed
                 if self.is_updatable_property_changed(old_response):
