@@ -1106,7 +1106,7 @@ class AzureRMAuth(object):
         }
         return cli_credentials
 
-    def _get_env_credentials(self):
+    def _get_env_credentials(self, subscription_id_parm=None):
         env_credentials = dict()
         for attribute, env_variable in AZURE_CREDENTIAL_ENV_MAPPING.items():
             env_credentials[attribute] = os.environ.get(env_variable, None)
@@ -1115,7 +1115,10 @@ class AzureRMAuth(object):
             credentials = self._get_profile(env_credentials['profile'])
             return credentials
 
-        if env_credentials.get('subscription_id') is not None:
+        if subscription_id_param:
+            env_credentials['subscription_id'] = subscription_id_param
+
+        if env_credentials['subscription_id']:
             return env_credentials
 
         return None
@@ -1149,7 +1152,7 @@ class AzureRMAuth(object):
 
         if auth_source == 'env':
             self.log('Retrieving credentials from environment')
-            env_credentials = self._get_env_credentials()
+            env_credentials = self._get_env_credentials(arg_credentials['subscription_id'])
             return env_credentials
 
         if auth_source == 'credential_file':
